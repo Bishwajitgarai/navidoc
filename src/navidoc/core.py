@@ -15,7 +15,7 @@ from .index.page import PageIndex
 from .db import Database
 
 class NaviDoc:
-    def __init__(self, model: Optional[str] = None, cache_dir: Optional[str] = None, session_id: str = "default", enable_db: bool = True, max_history: int = 10, use_embeddings: bool = False):
+    def __init__(self, model: Optional[str] = None, cache_dir: Optional[str] = None, session_id: str = "default", enable_db: bool = True, max_history: int = 10, use_embeddings: bool = False, use_sqlite_tree: bool = False):
         """
         Initialize NaviDoc SDK.
         
@@ -25,6 +25,7 @@ class NaviDoc:
         :param enable_db: Whether to use SQLite for chat storage
         :param max_history: Maximum number of chat turns to keep in context
         :param use_embeddings: Whether to use fast embeddings for tree navigation
+        :param use_sqlite_tree: Whether to store document tree in SQLite for large files
         """
         self.model = model or os.getenv("NAVIDOC_MODEL_NAME", "phi3")
         self.cache_dir = cache_dir or os.getenv("NAVIDOC_CACHE_DIR", "storage")
@@ -32,16 +33,19 @@ class NaviDoc:
         self.enable_db = enable_db
         self.max_history = max_history
         self.use_embeddings = use_embeddings
+        self.use_sqlite_tree = use_sqlite_tree
         
         self.index = None
-        self.index_type = None # "tree" or "page"
+        self.index_type = None # "tree", "page", or "sqlite_tree"
+        self.current_doc_id = None
         
         print(f"NaviDoc SDK initialized.")
         print(f"Model: {self.model}")
         print(f"Cache Dir: {self.cache_dir}")
         print(f"Session ID: {self.session_id}")
         print(f"History Limit: {self.max_history} turns")
-        print(f"Use Embeddings for Nav: {self.use_embeddings}")
+        print(f"Use Embeddings: {self.use_embeddings}")
+        print(f"Use SQLite Tree: {self.use_sqlite_tree}")
         
         # Initialize SQLite Database if enabled
         if self.enable_db:
@@ -58,7 +62,6 @@ class NaviDoc:
                 from model2vec import StaticModel
                 print("Loading Model2Vec 'potion-base-32M' for super-fast navigation...")
                 self.embedding_model = StaticModel.from_pretrained("minishlab/potion-base-32M")
-
                 print("Model2Vec loaded successfully.")
             except ImportError:
                 # Fallback to sentence-transformers
@@ -79,7 +82,6 @@ class NaviDoc:
         else:
             print("\nWarning: Could not connect to Ollama.")
             print("Please ensure the Ollama service is running on your machine.")
-
             print("You can try calling `engine.start_ollama()` to start it.\n")
 
     def is_ollama_running(self) -> bool:
@@ -138,37 +140,41 @@ class NaviDoc:
         except Exception as e:
             print(f"Failed to stop Ollama: {e}")
 
+    def _save_tree_to_db(self, node: Dict[str, Any], doc_id: str, parent_id: Optional[int] = None):
+        """Recursively save tree nodes to SQLite."""
+        title = node.get("title", "")
+        content = node.get("content", "")
+        
+        node_id = self.db.save_node(doc_id, title, content, parent_id)
+        
+        for child in node.get("children", []):
+            self._save_tree_to_db(child, doc_id, node_id)
+
     def ingest(self, file_path: str) -> str:
         """Ingest a document and create the appropriate index."""
         if not os.path.exists(file_path):
             return f"Error: File {file_path} not found."
 
         ext = os.path.splitext(file_path)[1].lower()
+        self.current_doc_id = file_path
         
+        # Auto-detect large files (> 10MB) to use SQLite tree
+        file_size = os.path.getsize(file_path)
+        use_sqlite = self.use_sqlite_tree or (file_size > 10 * 1024 * 1024)
+        if file_size > 10 * 1024 * 1024 and not self.use_sqlite_tree:
+            print(f"Notice: File is large ({file_size / 1024 / 1024:.2f} MB). Auto-enabling SQLite tree storage.")
+
+        
+        # Parse based on extension
         if ext == '.md':
             parser = MarkdownParser()
             tree_data = parser.parse(file_path)
-            self.index = TreeIndex()
-            self.index.load_tree(tree_data)
-            self.index_type = "tree"
-            return f"Successfully ingested Markdown: {file_path}"
-            
         elif ext == '.pdf':
             parser = PdfParser()
             tree_data = parser.parse(file_path)
-            self.index = TreeIndex()
-            self.index.load_tree(tree_data)
-            self.index_type = "tree"
-            return f"Successfully ingested PDF (Tree): {file_path}"
-            
         elif ext == '.docx':
             parser = DocxParser()
             tree_data = parser.parse(file_path)
-            self.index = TreeIndex()
-            self.index.load_tree(tree_data)
-            self.index_type = "tree"
-            return f"Successfully ingested DOCX (Tree): {file_path}"
-            
         elif ext == '.pptx':
             parser = PptxParser()
             pptx_data = parser.parse(file_path)
@@ -176,7 +182,6 @@ class NaviDoc:
             self.index.load_pages(pptx_data["pages"])
             self.index_type = "page"
             return f"Successfully ingested PPTX: {file_path}"
-            
         elif ext in ['.png', '.jpg', '.jpeg']:
             try:
                 from glmocr import parse
@@ -191,28 +196,37 @@ class NaviDoc:
                 
                 parser = MarkdownParser()
                 tree_data = parser.parse(temp_md_path)
-                
-                self.index = TreeIndex()
-                self.index.load_tree(tree_data)
-                self.index_type = "tree"
-                
                 try:
                     os.remove(temp_md_path)
                 except:
                     pass
-                    
-                return f"Successfully ingested Image via GLM-OCR: {file_path}"
-                
             except ImportError:
                 return "Error: 'glmocr' is not installed. Please run `pip install glmocr` to enable image support."
             except Exception as e:
                 return f"Error during OCR processing: {e}"
-            
         else:
             return f"Unsupported file format: {ext}"
 
+        # Handle Tree Data storage based on user choice
+        if use_sqlite and self.db:
+            print(f"Storing tree in SQLite for: {file_path}")
+
+            self.db.clear_document(file_path) # Clear old if exists
+            self._save_tree_to_db(tree_data, file_path)
+            self.index_type = "sqlite_tree"
+            return f"Successfully ingested {ext.upper()} (SQLite Tree): {file_path}"
+        else:
+            self.index = TreeIndex()
+            self.index.load_tree(tree_data)
+            self.index_type = "tree"
+            return f"Successfully ingested {ext.upper()}: {file_path}"
+
     def save_index(self, file_name: str):
-        """Save the current index to the cache directory."""
+        """Save the current index to the cache directory (Only for JSON-based trees)."""
+        if self.index_type == "sqlite_tree":
+            print("Index is stored in SQLite database. No need to save to JSON.")
+            return
+            
         if not self.index:
             raise ValueError("No index to save. Ingest a document first.")
             
@@ -266,47 +280,79 @@ Reply ONLY with 'YES' or 'NO'.
         except Exception:
             return True # Fallback to assuming relevant if error
 
-    def _navigate_tree_with_embeddings(self, query: str, node: Dict[str, Any]) -> str:
-        """Navigate tree using embeddings (Model2Vec or Sentence Transformers)."""
-        if not node.get("children"):
-            content = node.get("content", "")
-            if self._verify_relevance(query, content):
-                return content
-            else:
-                return "NOT_RELEVANT"
+    def _navigate_sqlite_tree(self, query: str, doc_id: str, parent_id: Optional[int]) -> str:
+        """Navigate tree stored in SQLite."""
+        children = self.db.get_children(doc_id, parent_id)
+        
+        if not children:
+            if parent_id is not None:
+                node = self.db.get_node(parent_id)
+                content = node.get("content", "") if node else ""
+                if self._verify_relevance(query, content):
+                    return content
+                else:
+                    return "NOT_RELEVANT"
+            return "No content."
 
-        headers = [child["title"] for child in node["children"]]
+        headers = [child["title"] for child in children]
         
-        # Compute embeddings (both return numpy arrays by default or can be converted)
-        query_emb = self.embedding_model.encode([query])
-        header_embs = self.embedding_model.encode(headers)
-        
-        # Ensure they are numpy arrays
-        query_emb = np.array(query_emb)
-        header_embs = np.array(header_embs)
-        
-        # Normalize for cosine similarity
-        query_emb = query_emb / np.linalg.norm(query_emb, axis=1, keepdims=True)
-        header_embs = header_embs / np.linalg.norm(header_embs, axis=1, keepdims=True)
-        
-        # Compute dot product
-        scores = np.dot(query_emb, header_embs.T)[0]
-        
-        # Find best match
-        best_idx = np.argmax(scores)
-        chosen_header = headers[best_idx]
-        
-        print(f"Embedding Navigation chose: {chosen_header}")
-        
-        for child in node["children"]:
-            if child["title"] == chosen_header:
-                result = self._navigate_tree(query, child)
-                if result == "NOT_RELEVANT":
-                    print(f"Notice: Leaf node in '{chosen_header}' was not relevant. Falling back to parent content.")
-                    return node.get("content", "Content not found.")
-                return result
+        # Use Embeddings if enabled
+        if self.use_embeddings and self.embedding_model:
+            query_emb = np.array(self.embedding_model.encode([query]))
+            header_embs = np.array(self.embedding_model.encode(headers))
+            
+            query_emb = query_emb / np.linalg.norm(query_emb, axis=1, keepdims=True)
+            header_embs = header_embs / np.linalg.norm(header_embs, axis=1, keepdims=True)
+            
+            scores = np.dot(query_emb, header_embs.T)[0]
+            best_idx = np.argmax(scores)
+            chosen_header = headers[best_idx]
+            chosen_id = children[best_idx]["id"]
+            
+            print(f"Embedding Navigation (SQLite) chose: {chosen_header}")
+            
+            result = self._navigate_sqlite_tree(query, doc_id, chosen_id)
+            if result == "NOT_RELEVANT":
+                if parent_id is not None:
+                    node = self.db.get_node(parent_id)
+                    return node.get("content", "") if node else ""
+                return "Not found."
+            return result
+            
+        # Fallback to LLM
+        else:
+            prompt = f"""
+Given the query: "{query}"
+And the following document sections:
+{", ".join([f"'{h}'" for h in headers])}
+
+Which section is most likely to contain the answer? 
+Reply ONLY with the exact section title from the list above. If none seem relevant, reply 'NONE'.
+"""
+            try:
+                response = ollama.generate(model=self.model, prompt=prompt)
+                chosen_header = response['response'].strip().strip("'").strip('"')
                 
-        return node.get("content", "Navigation path lost.")
+                if chosen_header == 'NONE':
+                    if parent_id is not None:
+                        node = self.db.get_node(parent_id)
+                        return node.get("content", "") if node else ""
+                    return "Not found."
+                    
+                for child in children:
+                    if child["title"] == chosen_header:
+                        result = self._navigate_sqlite_tree(query, doc_id, child["id"])
+                        if result == "NOT_RELEVANT":
+                            if parent_id is not None:
+                                node = self.db.get_node(parent_id)
+                                return node.get("content", "") if node else ""
+                            return "Not found."
+                        return result
+                        
+                return "Navigation path lost."
+                
+            except Exception as e:
+                return f"Navigation error: {str(e)}"
 
     def _navigate_tree(self, query: str, node: Dict[str, Any]) -> str:
         """Recursively navigate the tree using the local LLM or Embeddings."""
@@ -355,7 +401,9 @@ Reply ONLY with the exact section title from the list above. If none seem releva
         if not self.index:
             return "No document ingested yet."
 
-        if self.index_type == "tree":
+        if self.index_type == "sqlite_tree":
+            relevant_content = self._navigate_sqlite_tree(prompt, self.current_doc_id, None)
+        elif self.index_type == "tree":
             relevant_content = self._navigate_tree(prompt, self.index.tree)
             if relevant_content == "NOT_RELEVANT":
                 relevant_content = self.index.tree.get("content", "No relevant content found.")
@@ -380,7 +428,9 @@ Answer:
         if not self.index:
             return "No document ingested yet."
 
-        if self.index_type == "tree":
+        if self.index_type == "sqlite_tree":
+            relevant_content = self._navigate_sqlite_tree(prompt, self.current_doc_id, None)
+        elif self.index_type == "tree":
             relevant_content = self._navigate_tree(prompt, self.index.tree)
             if relevant_content == "NOT_RELEVANT":
                 relevant_content = self.index.tree.get("content", "No relevant content found.")

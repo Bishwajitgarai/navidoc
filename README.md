@@ -17,9 +17,12 @@ NaviDoc is a lightweight, **completely local, zero-API, tree-based RAG framework
 *   **📄 Multi-Format Support**: Supports Markdown, PDF (with font-size analysis), DOCX (with style detection), PPTX, and **Images** (PNG, JPG) via GLM-OCR!
 *   **💾 Index Persistence**: Save your indexed tree structures to JSON and reload them instantly.
 *   **💬 Persistent Chat SDK**: Maintain conversation history with your documents SDK-style, backed by a persistent SQLite database!
-*   **⚡ Hybrid Navigation (Optional)**: Use **Model2Vec** (or Sentence Transformers) for lightning-fast tree navigation instead of LLM calls! Up to 500x faster and extremely lightweight. (Defaults to False).
+*   **🚀 HYBRID NAVIGATION (NEW!)**: Use **Model2Vec** (or Sentence Transformers) for lightning-fast tree navigation instead of LLM calls! Up to 500x faster and extremely lightweight. (Defaults to False).
 *   **🛡️ Dead-End Protection**: The LLM verifies if the navigated section is actually relevant. If not, it falls back to parent content!
 *   **📉 History Limit**: Configurable chat history limits to prevent context blowouts.
+*   **🗄️ SQLite Tree Storage (Large Files)**: Support for massive PDFs by storing the tree structure in SQLite using a self-referencing hierarchy. **Auto-enables for files > 10MB!**
+
+
 
 
 
