@@ -98,13 +98,19 @@ class NaviDoc:
         """Pull the model if it is not present locally."""
         try:
             models_response = ollama.list()
-            pulled_models = [m['name'] for m in models_response.get('models', [])]
+            pulled_models = []
+            for m in models_response.get('models', []):
+                if isinstance(m, dict):
+                    pulled_models.append(m.get('name') or m.get('model') or '')
+                else:
+                    pulled_models.append(getattr(m, 'model', '') or getattr(m, 'name', ''))
             
             found = False
             for m in pulled_models:
-                if m == self.model or m.startswith(self.model + ":"):
+                if m == self.model or (isinstance(m, str) and m.startswith(self.model + ":")):
                     found = True
                     break
+
                     
             if not found:
                 print(f"Model '{self.model}' not found locally. Pulling it now... (This may take a while)")
