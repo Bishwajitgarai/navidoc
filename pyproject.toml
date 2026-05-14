@@ -11,7 +11,11 @@ dependencies = [
     "python-pptx>=1.0.2",
 ]
 
+[project.scripts]
+navidoc = "navidoc.cli:main"
+
 [dependency-groups]
+
 dev = [
     "pytest>=9.0.3",
 ]
