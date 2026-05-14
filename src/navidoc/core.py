@@ -547,3 +547,12 @@ Assistant:
             return os.path.join(self.cache_dir, "navidoc.db")
         else:
             return "not"
+
+    def get_documents(self) -> List[Dict[str, str]]:
+        """Get list of available documents with name and id."""
+        import os
+        if self.db:
+            docs = self.db.get_available_documents()
+            return [{"name": os.path.basename(doc), "id": doc} for doc in docs]
+        return []
+
