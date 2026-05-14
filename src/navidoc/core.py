@@ -11,9 +11,10 @@ from .parsers.docx import DocxParser
 from .parsers.pptx import PptxParser
 from .index.tree import TreeIndex
 from .index.page import PageIndex
+from .db import Database
 
 class NaviDoc:
-    def __init__(self, model: Optional[str] = None, cache_dir: Optional[str] = None):
+    def __init__(self, model: Optional[str] = None, cache_dir: Optional[str] = None, session_id: str = "default", enable_db: bool = True):
         """
         Initialize NaviDoc SDK.
         
@@ -29,19 +30,44 @@ class NaviDoc:
         """
         self.model = model or os.getenv("NAVIDOC_MODEL_NAME", "phi3")
         self.cache_dir = cache_dir or os.getenv("NAVIDOC_CACHE_DIR", "storage")
+        self.session_id = session_id
+        self.enable_db = enable_db
+        
         self.index = None
         self.index_type = None # "tree" or "page"
-        self.history: List[Dict[str, str]] = [] # Chat history
         
         print(f"NaviDoc SDK initialized.")
         print(f"Model: {self.model}")
         print(f"Cache Dir: {self.cache_dir}")
+        print(f"Session ID: {self.session_id}")
         
-        # Self-healing: Check Ollama and pull model if missing
-        self._ensure_ollama_and_model()
+        # Initialize SQLite Database if enabled
+        if self.enable_db:
+            db_path = os.path.join(self.cache_dir, "navidoc.db")
+            self.db = Database(db_path)
+        else:
+            self.db = None
+            self.history: List[Dict[str, str]] = []
+            
+        # Check Ollama status on init
+        if self.is_ollama_running():
+            print("Ollama service: Connected")
+            self._ensure_model_exists()
+        else:
+            print("\n⚠️ Warning: Could not connect to Ollama.")
+            print("Please ensure the Ollama service is running on your machine.")
+            print("You can try calling `engine.start_ollama()` to start it.\n")
 
-    def _ensure_ollama_and_model(self):
-        """Check if Ollama is running and pull the model if not present."""
+    def is_ollama_running(self) -> bool:
+        """Check if the Ollama service is running and accessible."""
+        try:
+            ollama.list()
+            return True
+        except Exception:
+            return False
+
+    def _ensure_model_exists(self):
+        """Pull the model if it is not present locally."""
         try:
             models_response = ollama.list()
             pulled_models = [m['name'] for m in models_response.get('models', [])]
@@ -56,12 +82,11 @@ class NaviDoc:
                 print(f"Model '{self.model}' not found locally. Pulling it now... (This may take a while)")
                 ollama.pull(self.model)
                 print(f"Successfully pulled {self.model}")
+            else:
+                print(f"Model '{self.model}' is ready.")
                 
         except Exception as e:
-            print(f"\n⚠️ Warning: Could not connect to Ollama.")
-            print(f"Please ensure the Ollama service is running on your machine.")
-            print(f"You can try calling `engine.start_ollama()` to start it.")
-            print(f"Details: {e}\n")
+            print(f"Error checking/pulling model: {e}")
 
     def start_ollama(self):
         """Try to start the Ollama service in the background."""
@@ -69,7 +94,6 @@ class NaviDoc:
         system = platform.system()
         try:
             if system == "Windows":
-                # Use CREATE_NO_WINDOW to avoid popping up a cmd window
                 subprocess.Popen(["ollama", "serve"], creationflags=subprocess.CREATE_NO_WINDOW)
             else:
                 subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -232,8 +256,13 @@ Answer:
         else:
             relevant_content = self.index.get_all_text()
 
+        if self.enable_db and self.db:
+            history = self.db.load_chat(self.session_id)
+        else:
+            history = self.history
+
         history_str = ""
-        for turn in self.history:
+        for turn in history:
             history_str += f"User: {turn['user']}\nAssistant: {turn['assistant']}\n"
 
         full_prompt = f"""
@@ -254,13 +283,26 @@ Assistant:
             response = ollama.generate(model=self.model, prompt=full_prompt)
             reply = response['response']
             
-            self.history.append({"user": prompt, "assistant": reply})
+            if self.enable_db and self.db:
+                self.db.save_chat(self.session_id, prompt, reply)
+            else:
+                self.history.append({"user": prompt, "assistant": reply})
             
             return reply
         except Exception as e:
             return f"Error calling Ollama: {str(e)}"
 
     def clear_history(self):
-        """Clear the chat history."""
-        self.history = []
-        print("Chat history cleared.")
+        """Clear the chat history for the current session."""
+        if self.enable_db and self.db:
+            self.db.clear_chat(self.session_id)
+        else:
+            self.history = []
+        print(f"Chat history cleared.")
+        
+    def get_db_path(self) -> str:
+        """Return the path to the SQLite database if enabled, otherwise 'not'."""
+        if self.enable_db:
+            return os.path.join(self.cache_dir, "navidoc.db")
+        else:
+            return "not"

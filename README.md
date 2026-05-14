@@ -27,11 +27,8 @@ NaviDoc is a lightweight, **completely local, zero-API, tree-based RAG framework
 NaviDoc requires **Ollama** to host your local LLM engine.
 
 1.  Download and install Ollama from [ollama.com](https://ollama.com).
-2.  Pull a smart, small model (we recommend `phi3` or `llama3`):
-    ```bash
-    ollama pull phi3
-    ```
-3.  Ensure the Ollama service is running in the background before running NaviDoc.
+2.  Ensure the Ollama service is running in the background. **NaviDoc will automatically pull the required model (defaults to `phi3`) on your first run!**
+
 
 ### 2. Installation
 
@@ -124,7 +121,19 @@ Traditional RAG (Retrieval-Augmented Generation) converts your documents into fl
 2.  **Tree Navigation**: When you ask a question, NaviDoc asks the local LLM to look at the top-level headers and choose the most relevant one. It then drills down the tree until it finds the exact content block.
 3.  **No Context Blowout**: By only feeding the relevant branch to the LLM, we avoid hitting context limits and prevent the model from getting confused by irrelevant text in other chapters.
 
+### 📊 Vector RAG vs NaviDoc (Tree-Based RAG)
+
+| Feature | Traditional Vector RAG | NaviDoc (Tree-Based) |
+| :--- | :--- | :--- |
+| **Data Processing** | Chops text into arbitrary, blind chunks | Parses document into a logical tree hierarchy |
+| **Embeddings** | Required (needs a separate embedding model) | **None** (zero embeddings required) |
+| **Database** | Requires a heavy Vector Database | **None** (uses simple JSON or SQLite) |
+| **Retrieval Method** | Math similarity (can pull irrelevant context) | **Reasoning** (asks LLM to navigate the tree) |
+| **Context Preserved** | Low (chunks lose their surrounding context) | **High** (always knows which section it belongs to) |
+| **Context Blowout** | High (often pulls too much noise) | **Low** (pinpoints exact sections) |
+
 ---
+
 
 ## 🤝 Contributing & Public Project
 
