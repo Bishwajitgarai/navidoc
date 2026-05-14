@@ -31,7 +31,10 @@ Stop blindly chopping your documents into arbitrary flat chunks. NaviDoc maps yo
 *   **💬 Persistent Chat Memory**: Backed by a localized SQLite database to maintain conversation memory across sessions (SDK-style).
 
 ### 🌐 5. Visual Web Interface (NEW!)
-*   **🌐 Local Web UI**: Launch a beautiful, premium web interface to chat with your documents using `navidoc ui`! (Powered by Gradio).
+*   **🌐 Local Web UI**: Launch a beautiful, premium web interface to chat with your documents using `navidoc ui` (accessible at `http://127.0.0.1:7860` by default)! (Powered by Gradio).
+*   **⚙️ Configurable Port**: Change the port by setting the `NAVIDOC_PORT` environment variable (e.g., `NAVIDOC_PORT=8080 navidoc ui`).
+
+
 
 ---
 

@@ -134,7 +134,10 @@ def create_ui():
 def launch_ui():
     """Launch the Gradio Web UI."""
     demo = create_ui()
-    demo.launch(server_name="127.0.0.1", server_port=7860, share=False)
+    port = int(os.environ.get("NAVIDOC_PORT", 7860))
+    # Share=False as we want it 100% local by default!
+    demo.launch(server_name="127.0.0.1", server_port=port, share=False)
+
 
 if __name__ == "__main__":
     launch_ui()
