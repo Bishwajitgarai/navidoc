@@ -163,7 +163,6 @@ class NaviDoc:
         use_sqlite = self.use_sqlite_tree or (file_size > 10 * 1024 * 1024)
         if file_size > 10 * 1024 * 1024 and not self.use_sqlite_tree:
             print(f"Notice: File is large ({file_size / 1024 / 1024:.2f} MB). Auto-enabling SQLite tree storage.")
-
         
         # Parse based on extension
         if ext == '.md':
@@ -210,7 +209,6 @@ class NaviDoc:
         # Handle Tree Data storage based on user choice
         if use_sqlite and self.db:
             print(f"Storing tree in SQLite for: {file_path}")
-
             self.db.clear_document(file_path) # Clear old if exists
             self._save_tree_to_db(tree_data, file_path)
             self.index_type = "sqlite_tree"
@@ -220,6 +218,38 @@ class NaviDoc:
             self.index.load_tree(tree_data)
             self.index_type = "tree"
             return f"Successfully ingested {ext.upper()}: {file_path}"
+
+    def _compress_text(self, text: str, max_sentences: int = 5) -> str:
+        """Pure-Python extractive summarization based on word frequency."""
+        import re
+        from collections import Counter
+        
+        # Split into sentences
+        sentences = re.split(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s', text)
+        if len(sentences) <= max_sentences:
+            return text
+            
+        # Tokenize and score words
+        words = re.findall(r'\b\w+\b', text.lower())
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'to', 'for', 'in', 'of', 'on', 'with', 'by', 'at', 'this', 'that'}
+        
+        filtered_words = [w for w in words if w not in stop_words and len(w) > 2]
+        word_counts = Counter(filtered_words)
+        
+        if not word_counts:
+            return " ".join(sentences[:max_sentences])
+            
+        sentence_scores = []
+        for i, sent in enumerate(sentences):
+            sent_words = re.findall(r'\b\w+\b', sent.lower())
+            score = sum(word_counts[w] for w in sent_words if w in word_counts)
+            sentence_scores.append((score, i, sent))
+            
+        top_sentences = sorted(sentence_scores, key=lambda x: x[0], reverse=True)[:max_sentences]
+        top_sentences = sorted(top_sentences, key=lambda x: x[1])
+        
+        print(f"Compressed text from {len(sentences)} to {len(top_sentences)} sentences.")
+        return " ".join([sent for _, _, sent in top_sentences])
 
     def save_index(self, file_name: str):
         """Save the current index to the cache directory (Only for JSON-based trees)."""
@@ -357,7 +387,23 @@ Reply ONLY with the exact section title from the list above. If none seem releva
     def _navigate_tree(self, query: str, node: Dict[str, Any]) -> str:
         """Recursively navigate the tree using the local LLM or Embeddings."""
         if self.use_embeddings and self.embedding_model:
-            return self._navigate_tree_with_embeddings(query, node)
+            headers = [child["title"] for child in node["children"]]
+            query_emb = np.array(self.embedding_model.encode([query]))
+            header_embs = np.array(self.embedding_model.encode(headers))
+            query_emb = query_emb / np.linalg.norm(query_emb, axis=1, keepdims=True)
+            header_embs = header_embs / np.linalg.norm(header_embs, axis=1, keepdims=True)
+            scores = np.dot(query_emb, header_embs.T)[0]
+            best_idx = np.argmax(scores)
+            chosen_header = headers[best_idx]
+            print(f"Embedding Navigation chose: {chosen_header}")
+            
+            for child in node["children"]:
+                if child["title"] == chosen_header:
+                    result = self._navigate_tree(query, child)
+                    if result == "NOT_RELEVANT":
+                        return node.get("content", "Content not found.")
+                    return result
+            return node.get("content", "Navigation path lost.")
             
         if not node.get("children"):
             content = node.get("content", "")
@@ -410,6 +456,10 @@ Reply ONLY with the exact section title from the list above. If none seem releva
         else:
             relevant_content = self.index.get_all_text()
 
+        # Compress text if it is too long (e.g., > 3000 characters)
+        if len(relevant_content) > 3000:
+            relevant_content = self._compress_text(relevant_content)
+
         full_prompt = f"""
 Answer the user's question based ONLY on this specific context found during navigation:
 {relevant_content}
@@ -436,6 +486,10 @@ Answer:
                 relevant_content = self.index.tree.get("content", "No relevant content found.")
         else:
             relevant_content = self.index.get_all_text()
+
+        # Compress text if it is too long (e.g., > 3000 characters)
+        if len(relevant_content) > 3000:
+            relevant_content = self._compress_text(relevant_content)
 
         # Load history
         if self.enable_db and self.db:

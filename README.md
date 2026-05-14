@@ -1,92 +1,106 @@
-# 🗺️ NaviDoc
+# 🗺️ NaviDoc: The Ultimate Local RAG Framework
 
-NaviDoc is a lightweight, **completely local, zero-API, tree-based RAG (Retrieval-Augmented Generation) framework** designed to navigate document structures intelligently. Instead of blindly chopping your files into arbitrary vector chunks, NaviDoc maps your documents into a logical structural tree hierarchy and uses local LLMs or fast embeddings to precisely steer and navigate to answers.
+[![PyPI Version](https://img.shields.io/pypi/v/navidoc.svg)](https://pypi.org/project/navidoc/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-🔗 **Quick Links:**
-*   **PyPI**: [https://pypi.org/project/navidoc/](https://pypi.org/project/navidoc/)
-*   **GitHub**: [https://github.com/Bishwajitgarai/navidoc](https://github.com/Bishwajitgarai/navidoc)
+**NaviDoc** is a lightweight, **completely local, zero-API, tree-based RAG (Retrieval-Augmented Generation) framework** designed to navigate document structures with human-like intelligence. 
 
----
-
-## 🚀 Key Features
-
-### 🧠 Intelligent Navigation
-*   **🌳 Tree-Based RAG**: Mimics human navigation by following document structures (headers, font sizes) instead of standard proximity vector chunks.
-*   **🛡️ Dead-End Protection**: The LLM verifies if the navigated section is actually relevant. If not, it falls back to parent content automatically!
-
-### ⚡ Blazing Fast & Hybrid
-*   **🚀 Hybrid Navigation**: Optionally use **Model2Vec** (specifically the `potion-base-32M` model) for lightning-fast tree navigation instead of LLM calls! Up to 500x faster and extremely lightweight.
-*   **📉 History Limit**: Configurable chat history limits to prevent context blowouts and maintain speed.
-
-### 📄 Enterprise Document Support
-*   **Multi-Format Mastery**: Native support for Markdown, PDF (with font-size analysis), DOCX (with style detection), and PPTX.
-*   **🖼️ OCR Support**: Ingest images (PNG, JPG) via optional **GLM-OCR** integration!
-*   **🗄️ Smart SQLite Storage**: Support for massive PDFs by storing the tree structure in SQLite using a self-referencing hierarchy. **Auto-enables for files > 10MB!**
-
-### 🔒 Privacy & Control
-*   **🔒 100% Private & Offline**: Your documents never leave your machine. Zero cloud APIs, zero telemetry.
-*   **💬 Persistent Chat**: Maintain conversation history with your documents SDK-style, backed by a localized SQLite database.
+Stop blindly chopping your documents into arbitrary flat chunks. NaviDoc maps your files into a logical structural tree hierarchy and uses local LLMs or ultra-fast static embeddings to precisely steer and navigate to answers.
 
 ---
 
-## ⚙️ How it Works: Vectorless RAG
+## 🚀 Why NaviDoc is Different (The "Crazy" Features)
 
-Traditional RAG converts your documents into flat text chunks, turns them into math vectors (embeddings), and searches for chunks that look similar to your query. 
+### 🧠 1. Intelligent "Vectorless" Tree Navigation
+*   **🌳 True Hierarchy**: NaviDoc mimics human reading. It follows headers, font sizes, and sections to build a mental map of your document.
+*   **🛡️ Dead-End Protection**: Our smart navigation algorithm includes LLM verification. If it navigates to a section that turns out to be irrelevant, it falls back to parent content rather than giving a hallucinated answer!
 
-**NaviDoc takes a better approach:**
-1.  **Parse**: It reads your document and builds a tree based on visual structure (e.g., `#` headers in Markdown or large fonts in PDF).
-2.  **Navigate**: When you ask a question, it starts at the root and asks the model (LLM or Model2Vec): *"Which of these sections contains the answer?"*
-3.  **Refine**: It steps down the tree until it finds the exact leaf node containing the relevant content.
-4.  **Answer**: It feeds only that highly specific context to the LLM to generate the final answer.
+### ⚡ 2. Blazing Fast Hybrid Mode
+*   **🚀 Model2Vec Integration**: Use the cutting-edge `potion-base-32M` model for lightning-fast tree navigation instead of heavy LLM calls. Up to **500x faster** on CPU!
+*   **📉 History Limit Control**: Configurable chat history limits (`max_history`) to prevent context blowouts and keep your local LLM fast and responsive.
+*   **🗜️ Context Compression**: Auto-summarizes large sections using pure Python (no LLM load) to prevent context overflow!
+
+### 📄 3. Enterprise Document Support
+
+*   **Multi-Format Mastery**: Native support for **Markdown**, **PDF** (with advanced font-size analysis), **DOCX** (with style detection), and **PPTX**.
+*   **🖼️ OCR Weaponry**: Ingest images (`.png`, `.jpg`, `.jpeg`) via seamless **GLM-OCR** integration!
+*   **🗄️ Auto-Scaling SQLite Tree**: Support for massive files! If a file is larger than **10MB**, NaviDoc automatically switches to a self-referencing SQLite tree structure to save memory!
+
+### 🔒 4. 100% Privacy & Zero Cost
+*   **🔒 100% Private**: Your documents never leave your machine. Zero cloud APIs, zero telemetry, zero data leaks.
+*   **💬 Persistent Chat Memory**: Backed by a localized SQLite database to maintain conversation memory across sessions (SDK-style).
+
+### 🌐 5. Visual Web Interface (NEW!)
+*   **🌐 Local Web UI**: Launch a beautiful, premium web interface to chat with your documents using `navidoc ui`! (Powered by Gradio).
 
 ---
 
-## 🛠️ Getting Started
 
-### 1. Installation
+## 🛠️ Installation
 
-Install NaviDoc via pip or uv:
+NaviDoc comes with **all batteries included**! Core dependencies like Model2Vec, Sentence-Transformers, and GLM-OCR are installed automatically!
 
+### Using `pip`:
 ```bash
 pip install navidoc
 ```
 
+### Using `uv` (Highly Recommended):
+```bash
+uv add navidoc
+```
 
-*That's it! All core dependencies like Model2Vec, Sentence-Transformers, and GLM-OCR are now included automatically!*
+---
 
+## ⌨️ Master the CLI
 
-### 2. Prerequisites
+NaviDoc comes with a powerful CLI that acts as a bridge between you and your local AI environment:
 
-NaviDoc requires **Ollama** to host your local LLM engine.
-*   **Auto-Install via NaviDoc CLI**: `navidoc install-ollama`
-*   Or download it manually from [ollama.ai](https://ollama.ai/).
+| Command | Description |
+| :--- | :--- |
+| `navidoc install-ollama` | Auto-downloads and installs Ollama for your OS (Windows/Linux). |
+| `navidoc doctor` | Checks the status of all dependencies (Ollama, Model2Vec, OCR). |
+| `navidoc run <model>` | Directly run an Ollama model. |
+| `navidoc pull <model>` | Pull a model from the Ollama library. |
+| `navidoc list` | List all installed Ollama models. |
+| `navidoc ollama <args>` | Forward any command directly to the Ollama service. |
 
-### 3. Basic Usage
+*If using `uv`, you can run any command directly without installing globally:*
+```bash
+uv run navidoc doctor
+```
+
+---
+
+## 💻 Quick Start (Code Examples)
+
+### 1. Basic Ingestion & Query
 
 ```python
 from navidoc import NaviDoc
 
-# Initialize the engine (Defaults to 'phi3' model)
+# Initialize (Defaults to 'phi3' model)
 engine = NaviDoc()
 
-# For super-fast navigation using Model2Vec
+# For ultra-fast navigation using Model2Vec embeddings
 # engine = NaviDoc(use_embeddings=True)
 
 # Ingest a document (Auto-detects format)
-engine.ingest("user_manual.pdf")
+engine.ingest("enterprise_guide.pdf")
 
 # Query your document offline
 response = engine.query("What are the exact system requirements?")
 print(response)
 ```
 
-### 💬 Multi-turn Chat (SDK Style)
+### 2. Multi-Turn Persistent Chat (SDK Style)
 
-NaviDoc remembers conversations!
+NaviDoc remembers conversations across sessions using a local SQLite database!
 
 ```python
 from navidoc import NaviDoc
 
+# Initialize with a specific session ID
 engine = NaviDoc(session_id="project_alpha_chat")
 
 engine.ingest("project_plan.docx")
@@ -100,23 +114,11 @@ print(engine.chat("What are their primary responsibilities?"))
 
 ---
 
-## ⌨️ CLI Commands
+## 🤝 Contributing & Open Source
 
-NaviDoc comes with a powerful CLI to manage your local environment:
+We are building the future of local, private document understanding and we want your help! Whether you want to add new parsers, optimize the tree navigation, or improve the docs — all contributions are welcome.
 
-*   `navidoc install-ollama`: Auto-downloads and installs Ollama for your OS.
-*   `navidoc doctor`: Check status of dependencies.
-*   `navidoc run <model>`: Run a specific model.
+*   **PyPI**: [https://pypi.org/project/navidoc/](https://pypi.org/project/navidoc/)
+*   **GitHub**: [https://github.com/Bishwajitgarai/navidoc](https://github.com/Bishwajitgarai/navidoc)
 
-*   `navidoc pull <model>`: Pull a model.
-*   `navidoc list`: List installed models.
-*   `navidoc ollama <args>`: Forward any command directly to Ollama.
-
----
-
-## 🤝 Contributing
-
-We are building the future of local, private document understanding and we want your help! 
-Whether you want to add new parsers, optimize the tree navigation, or just improve the docs — all contributions are welcome.
-
-Feel free to open issues or submit PRs on our [GitHub Repository](https://github.com/Bishwajitgarai/navidoc).
+Feel free to open issues or submit PRs on our GitHub Repository! 🚀

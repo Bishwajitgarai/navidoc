@@ -131,3 +131,15 @@ class Database:
         ''', (doc_id,))
         conn.commit()
         conn.close()
+
+    def get_available_documents(self) -> List[str]:
+        """Get list of distinct document IDs stored in the database."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT DISTINCT doc_id FROM document_nodes
+        ''')
+        rows = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in rows]
+

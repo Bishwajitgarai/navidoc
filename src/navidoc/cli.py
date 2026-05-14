@@ -80,11 +80,13 @@ def main():
         print("\nCommands:")
         print("  install-ollama  Download and install Ollama automatically")
         print("  doctor          Check status of dependencies")
+        print("  ui              Launch the local Web UI")
         print("  run <model>     Run an Ollama model directly")
         print("  pull <model>    Pull an Ollama model")
         print("  list            List installed Ollama models")
         print("  ollama <args>   Forward any command directly to Ollama")
         return
+
         
     command = sys.argv[1]
     
@@ -92,7 +94,14 @@ def main():
         install_ollama()
     elif command == "doctor":
         doctor()
+    elif command == "ui":
+        try:
+            from navidoc.ui import launch_ui
+            launch_ui()
+        except ImportError:
+            print("Error: Gradio is not installed. Please run `pip install gradio`.")
     elif command == "run":
+
         if len(sys.argv) < 3:
             print("Usage: navidoc run <model>")
             return
