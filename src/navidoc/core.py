@@ -14,7 +14,7 @@ from .index.page import PageIndex
 from .db import Database
 
 class NaviDoc:
-    def __init__(self, model: Optional[str] = None, cache_dir: Optional[str] = None, session_id: str = "default", enable_db: bool = True, max_history: int = 10):
+    def __init__(self, model: Optional[str] = None, cache_dir: Optional[str] = None, session_id: str = "default", enable_db: bool = True, max_history: int = 10, use_embeddings: bool = False):
         """
         Initialize NaviDoc SDK.
         
@@ -23,12 +23,14 @@ class NaviDoc:
         :param session_id: Session ID for chat history
         :param enable_db: Whether to use SQLite for chat storage
         :param max_history: Maximum number of chat turns to keep in context
+        :param use_embeddings: Whether to use Sentence Transformers for faster tree navigation
         """
         self.model = model or os.getenv("NAVIDOC_MODEL_NAME", "phi3")
         self.cache_dir = cache_dir or os.getenv("NAVIDOC_CACHE_DIR", "storage")
         self.session_id = session_id
         self.enable_db = enable_db
         self.max_history = max_history
+        self.use_embeddings = use_embeddings
         
         self.index = None
         self.index_type = None # "tree" or "page"
@@ -38,6 +40,7 @@ class NaviDoc:
         print(f"Cache Dir: {self.cache_dir}")
         print(f"Session ID: {self.session_id}")
         print(f"History Limit: {self.max_history} turns")
+        print(f"Use Embeddings for Nav: {self.use_embeddings}")
         
         # Initialize SQLite Database if enabled
         if self.enable_db:
@@ -47,6 +50,19 @@ class NaviDoc:
             self.db = None
             self.history: List[Dict[str, str]] = []
             
+        # Initialize Sentence Transformer if requested
+        self.embedding_model = None
+        if self.use_embeddings:
+            try:
+                from sentence_transformers import SentenceTransformer
+                print("Loading Sentence Transformer model ('all-MiniLM-L6-v2') for navigation...")
+                # This will download/load a small 80MB model
+                self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                print("Sentence Transformer loaded successfully.")
+            except ImportError:
+                print("Warning: 'sentence-transformers' not installed. Falling back to LLM navigation.")
+                self.use_embeddings = False
+        
         # Check Ollama status on init
         if self.is_ollama_running():
             print("Ollama service: Connected")
@@ -240,8 +256,49 @@ Reply ONLY with 'YES' or 'NO'.
         except Exception:
             return True # Fallback to assuming relevant if error
 
+    def _navigate_tree_with_embeddings(self, query: str, node: Dict[str, Any]) -> str:
+        """Navigate tree using embeddings instead of LLM."""
+        if not node.get("children"):
+            content = node.get("content", "")
+            if self._verify_relevance(query, content):
+                return content
+            else:
+                return "NOT_RELEVANT"
+
+        from sentence_transformers import util
+        import torch
+        
+        headers = [child["title"] for child in node["children"]]
+        
+        # Compute embeddings
+        query_emb = self.embedding_model.encode(query, convert_to_tensor=True)
+        header_embs = self.embedding_model.encode(headers, convert_to_tensor=True)
+        
+        # Compute cosine similarities
+        cos_scores = util.cos_sim(query_emb, header_embs)[0]
+        
+        # Find best match
+        best_idx = torch.argmax(cos_scores).item()
+        chosen_header = headers[best_idx]
+        
+        print(f"Embedding Navigation chose: {chosen_header}")
+        
+        for child in node["children"]:
+            if child["title"] == chosen_header:
+                result = self._navigate_tree(query, child) # Continue recursively
+                if result == "NOT_RELEVANT":
+                    print(f"Notice: Leaf node in '{chosen_header}' was not relevant. Falling back to parent content.")
+                    return node.get("content", "Content not found.")
+                return result
+                
+        return node.get("content", "Navigation path lost.")
+
     def _navigate_tree(self, query: str, node: Dict[str, Any]) -> str:
-        """Recursively navigate the tree using the local LLM."""
+        """Recursively navigate the tree using the local LLM or Embeddings."""
+        # If embeddings are enabled and model is loaded, use them for faster navigation!
+        if self.use_embeddings and self.embedding_model:
+            return self._navigate_tree_with_embeddings(query, node)
+            
         if not node.get("children"):
             content = node.get("content", "")
             # Check relevance at leaf node!
