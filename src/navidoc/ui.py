@@ -40,9 +40,10 @@ def create_ui():
                 gr.Markdown("""
                 ---
                 ### ⚙️ Settings
-                *   **Model**: phi3
+                *   **Model**: smollm
                 *   **Navigation**: Model2Vec (32M)
                 *   **Storage**: Auto-SQLite
+
                 """)
                 
             with gr.Column(scale=3):
