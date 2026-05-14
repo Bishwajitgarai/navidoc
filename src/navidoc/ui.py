@@ -40,9 +40,10 @@ def create_ui():
                 gr.Markdown("""
                 ---
                 ### ⚙️ Settings
-                *   **Model**: smollm
+                *   **Model**: qwen2.5:1.5b
                 *   **Navigation**: Model2Vec (32M)
                 *   **Storage**: Auto-SQLite
+
 
                 """)
                 

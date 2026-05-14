@@ -19,7 +19,7 @@ class NaviDoc:
         """
         Initialize NaviDoc SDK.
         
-        :param model: Ollama model name (default: 'smollm')
+        :param model: Ollama model name (default: 'qwen2.5:1.5b')
         :param cache_dir: Directory for storage (default: 'storage')
         :param session_id: Session ID for chat history
         :param enable_db: Whether to use SQLite for chat storage
@@ -27,7 +27,8 @@ class NaviDoc:
         :param use_embeddings: Whether to use fast embeddings for tree navigation
         :param use_sqlite_tree: Whether to store document tree in SQLite for large files
         """
-        self.model = model or os.getenv("NAVIDOC_MODEL_NAME", "smollm")
+        self.model = model or os.getenv("NAVIDOC_MODEL_NAME", "qwen2.5:1.5b")
+
 
         self.cache_dir = cache_dir or os.getenv("NAVIDOC_CACHE_DIR", "storage")
         self.session_id = session_id
