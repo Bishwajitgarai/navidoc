@@ -1,7 +1,8 @@
 [project]
 name = "navidoc"
-version = "0.1.5"
+version = "0.1.6"
 description = "A lightweight, completely local, zero-API, tree-based RAG framework"
+
 
 
 
@@ -32,7 +33,5 @@ dev = [
     "pytest>=9.0.3",
 ]
 
-[tool.uv.workspace]
-members = [
-    "test_install",
-]
+
+
