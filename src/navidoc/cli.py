@@ -11,15 +11,12 @@ def install_ollama():
     
     if system == "Windows":
         url = "https://ollama.com/download/OllamaSetup.exe"
-        # Save to temp directory
         installer_path = os.path.join(os.environ.get("TEMP", "."), "OllamaSetup.exe")
         
         print(f"Downloading Ollama installer from {url}...")
         try:
             urllib.request.urlretrieve(url, installer_path)
             print(f"Downloaded to {installer_path}. Running installer...")
-            # Run installer. On Windows, this will usually pop up UAC or the GUI.
-            # We don't use silent flags because we want the user to see it and complete it.
             subprocess.run([installer_path], check=True)
             print("Ollama installation process finished.")
         except Exception as e:
@@ -29,14 +26,13 @@ def install_ollama():
     elif system == "Linux":
         print("Running Ollama install script (requires curl)...")
         try:
-            # This requires curl and sudo permissions usually
             subprocess.run("curl -fsSL https://ollama.com/install.sh | sh", shell=True, check=True)
             print("Ollama installed successfully.")
         except Exception as e:
             print(f"Failed to install Ollama: {e}")
             print("Please install it manually from https://ollama.com")
             
-    elif system == "Darwin": # Mac
+    elif system == "Darwin":
         print("Automatic installation for Mac is not fully supported yet.")
         print("Please download the Mac app from https://ollama.com")
         
@@ -46,18 +42,49 @@ def install_ollama():
 
 def main():
     if len(sys.argv) < 2:
-        print("NaviDoc CLI")
-        print("Usage: navidoc <command>")
-        print("Commands:")
+        print("NaviDoc CLI - Your local RAG and Ollama helper")
+        print("Usage: navidoc <command> [args]")
+        print("\nCommands:")
         print("  install-ollama  Download and install Ollama automatically")
+        print("  run <model>     Run an Ollama model directly")
+        print("  pull <model>    Pull an Ollama model")
+        print("  list            List installed Ollama models")
+        print("  ollama <args>   Forward any command directly to Ollama")
         return
         
     command = sys.argv[1]
+    
     if command == "install-ollama":
         install_ollama()
+    elif command == "run":
+        if len(sys.argv) < 3:
+            print("Usage: navidoc run <model>")
+            return
+        try:
+            subprocess.run(["ollama", "run", sys.argv[2]])
+        except FileNotFoundError:
+            print("Error: Ollama command not found. Is it installed?")
+    elif command == "pull":
+        if len(sys.argv) < 3:
+            print("Usage: navidoc pull <model>")
+            return
+        try:
+            subprocess.run(["ollama", "pull", sys.argv[2]])
+        except FileNotFoundError:
+            print("Error: Ollama command not found. Is it installed?")
+    elif command == "list":
+        try:
+            subprocess.run(["ollama", "list"])
+        except FileNotFoundError:
+            print("Error: Ollama command not found. Is it installed?")
+    elif command == "ollama":
+        try:
+            subprocess.run(["ollama"] + sys.argv[2:])
+        except FileNotFoundError:
+            print("Error: Ollama command not found. Is it installed?")
     else:
         print(f"Unknown command: {command}")
-        print("Available commands: install-ollama")
+        print("Available commands: install-ollama, run, pull, list, ollama")
 
 if __name__ == "__main__":
     main()
