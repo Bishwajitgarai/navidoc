@@ -1,5 +1,7 @@
 import os
 import json
+import subprocess
+import platform
 from typing import Optional, Dict, Any, List
 import ollama
 
@@ -11,7 +13,7 @@ from .index.tree import TreeIndex
 from .index.page import PageIndex
 
 class NaviDoc:
-    def __init__(self, model: Optional[str] = None):
+    def __init__(self, model: Optional[str] = None, cache_dir: Optional[str] = None):
         """
         Initialize NaviDoc SDK.
         
@@ -19,13 +21,74 @@ class NaviDoc:
         1. Explicitly passed `model` argument.
         2. `NAVIDOC_MODEL_NAME` environment variable.
         3. Fallback default 'phi3'.
+        
+        Priority for cache directory:
+        1. Explicitly passed `cache_dir` argument.
+        2. `NAVIDOC_CACHE_DIR` environment variable.
+        3. Fallback default 'storage'.
         """
         self.model = model or os.getenv("NAVIDOC_MODEL_NAME", "phi3")
+        self.cache_dir = cache_dir or os.getenv("NAVIDOC_CACHE_DIR", "storage")
         self.index = None
         self.index_type = None # "tree" or "page"
         self.history: List[Dict[str, str]] = [] # Chat history
         
-        print(f"NaviDoc SDK initialized with model: {self.model}")
+        print(f"NaviDoc SDK initialized.")
+        print(f"Model: {self.model}")
+        print(f"Cache Dir: {self.cache_dir}")
+        
+        # Self-healing: Check Ollama and pull model if missing
+        self._ensure_ollama_and_model()
+
+    def _ensure_ollama_and_model(self):
+        """Check if Ollama is running and pull the model if not present."""
+        try:
+            models_response = ollama.list()
+            pulled_models = [m['name'] for m in models_response.get('models', [])]
+            
+            found = False
+            for m in pulled_models:
+                if m == self.model or m.startswith(self.model + ":"):
+                    found = True
+                    break
+                    
+            if not found:
+                print(f"Model '{self.model}' not found locally. Pulling it now... (This may take a while)")
+                ollama.pull(self.model)
+                print(f"Successfully pulled {self.model}")
+                
+        except Exception as e:
+            print(f"\n⚠️ Warning: Could not connect to Ollama.")
+            print(f"Please ensure the Ollama service is running on your machine.")
+            print(f"You can try calling `engine.start_ollama()` to start it.")
+            print(f"Details: {e}\n")
+
+    def start_ollama(self):
+        """Try to start the Ollama service in the background."""
+        print("Attempting to start Ollama service...")
+        system = platform.system()
+        try:
+            if system == "Windows":
+                # Use CREATE_NO_WINDOW to avoid popping up a cmd window
+                subprocess.Popen(["ollama", "serve"], creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("Ollama start command issued.")
+        except Exception as e:
+            print(f"Failed to start Ollama: {e}")
+
+    def stop_ollama(self):
+        """Try to stop the Ollama service."""
+        print("Attempting to stop Ollama service...")
+        system = platform.system()
+        try:
+            if system == "Windows":
+                subprocess.run(["taskkill", "/IM", "ollama.exe", "/F"], capture_output=True)
+            else:
+                subprocess.run(["pkill", "ollama"], capture_output=True)
+            print("Ollama stop command issued.")
+        except Exception as e:
+            print(f"Failed to stop Ollama: {e}")
 
     def ingest(self, file_path: str) -> str:
         """Ingest a document and create the appropriate index."""
@@ -69,12 +132,8 @@ class NaviDoc:
         else:
             return f"Unsupported file format: {ext}"
 
-    def ingest_markdown(self, file_path: str) -> str:
-        """Explicit method for markdown as requested in README."""
-        return self.ingest(file_path)
-
-    def save_index(self, file_path: str):
-        """Save the current index to a JSON file for fast reloading."""
+    def save_index(self, file_name: str):
+        """Save the current index to the cache directory."""
         if not self.index:
             raise ValueError("No index to save. Ingest a document first.")
             
@@ -84,14 +143,16 @@ class NaviDoc:
             "pages": self.index.pages if self.index_type == "page" else None
         }
         
+        file_path = os.path.join(self.cache_dir, file_name)
         os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
         
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         print(f"Index successfully saved to {file_path}")
 
-    def load_index(self, file_path: str):
-        """Load a previously saved index from a JSON file."""
+    def load_index(self, file_name: str):
+        """Load a previously saved index from the cache directory."""
+        file_path = os.path.join(self.cache_dir, file_name)
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Index file not found: {file_path}")
             
@@ -166,13 +227,11 @@ Answer:
         if not self.index:
             return "No document ingested yet."
 
-        # Get context for the latest query
         if self.index_type == "tree":
             relevant_content = self._navigate_tree(prompt, self.index.tree)
         else:
             relevant_content = self.index.get_all_text()
 
-        # Format history for Ollama
         history_str = ""
         for turn in self.history:
             history_str += f"User: {turn['user']}\nAssistant: {turn['assistant']}\n"
@@ -195,7 +254,6 @@ Assistant:
             response = ollama.generate(model=self.model, prompt=full_prompt)
             reply = response['response']
             
-            # Save to history
             self.history.append({"user": prompt, "assistant": reply})
             
             return reply
