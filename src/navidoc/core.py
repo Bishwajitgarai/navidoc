@@ -153,6 +153,44 @@ class NaviDoc:
             self.index_type = "page"
             return f"Successfully ingested PPTX: {file_path}"
             
+        elif ext in ['.png', '.jpg', '.jpeg']:
+            # Optional dependency for OCR
+            try:
+                from glmocr import parse
+                print(f"Using GLM-OCR to parse image: {file_path}")
+                result = parse(file_path)
+                
+                # GLM-OCR returns structured Markdown. Let's assume it has a property or we can use str()
+                # Based on typical SDKs, let's assume it has a property or we can extract the text.
+                # To be safe, we'll try to get 'markdown' or fall back to string representation.
+                text = getattr(result, 'markdown', str(result))
+                
+                # We save the extracted markdown to a temp file and use our MarkdownParser!
+                temp_md_path = os.path.join(self.cache_dir, "temp_ocr.md")
+                os.makedirs(os.path.dirname(temp_md_path), exist_ok=True)
+                with open(temp_md_path, 'w', encoding='utf-8') as f:
+                    f.write(text)
+                
+                parser = MarkdownParser()
+                tree_data = parser.parse(temp_md_path)
+                
+                self.index = TreeIndex()
+                self.index.load_tree(tree_data)
+                self.index_type = "tree"
+                
+                # Clean up temp file
+                try:
+                    os.remove(temp_md_path)
+                except:
+                    pass
+                    
+                return f"Successfully ingested Image via GLM-OCR: {file_path}"
+                
+            except ImportError:
+                return "Error: 'glmocr' is not installed. Please run `pip install glmocr` to enable image support."
+            except Exception as e:
+                return f"Error during OCR processing: {e}"
+            
         else:
             return f"Unsupported file format: {ext}"
 
