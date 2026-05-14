@@ -14,24 +14,21 @@ from .index.page import PageIndex
 from .db import Database
 
 class NaviDoc:
-    def __init__(self, model: Optional[str] = None, cache_dir: Optional[str] = None, session_id: str = "default", enable_db: bool = True):
+    def __init__(self, model: Optional[str] = None, cache_dir: Optional[str] = None, session_id: str = "default", enable_db: bool = True, max_history: int = 10):
         """
         Initialize NaviDoc SDK.
         
-        Priority for model selection:
-        1. Explicitly passed `model` argument.
-        2. `NAVIDOC_MODEL_NAME` environment variable.
-        3. Fallback default 'phi3'.
-        
-        Priority for cache directory:
-        1. Explicitly passed `cache_dir` argument.
-        2. `NAVIDOC_CACHE_DIR` environment variable.
-        3. Fallback default 'storage'.
+        :param model: Ollama model name (default: 'phi3')
+        :param cache_dir: Directory for storage (default: 'storage')
+        :param session_id: Session ID for chat history
+        :param enable_db: Whether to use SQLite for chat storage
+        :param max_history: Maximum number of chat turns to keep in context
         """
         self.model = model or os.getenv("NAVIDOC_MODEL_NAME", "phi3")
         self.cache_dir = cache_dir or os.getenv("NAVIDOC_CACHE_DIR", "storage")
         self.session_id = session_id
         self.enable_db = enable_db
+        self.max_history = max_history
         
         self.index = None
         self.index_type = None # "tree" or "page"
@@ -40,6 +37,7 @@ class NaviDoc:
         print(f"Model: {self.model}")
         print(f"Cache Dir: {self.cache_dir}")
         print(f"Session ID: {self.session_id}")
+        print(f"History Limit: {self.max_history} turns")
         
         # Initialize SQLite Database if enabled
         if self.enable_db:
@@ -154,18 +152,12 @@ class NaviDoc:
             return f"Successfully ingested PPTX: {file_path}"
             
         elif ext in ['.png', '.jpg', '.jpeg']:
-            # Optional dependency for OCR
             try:
                 from glmocr import parse
                 print(f"Using GLM-OCR to parse image: {file_path}")
                 result = parse(file_path)
-                
-                # GLM-OCR returns structured Markdown. Let's assume it has a property or we can use str()
-                # Based on typical SDKs, let's assume it has a property or we can extract the text.
-                # To be safe, we'll try to get 'markdown' or fall back to string representation.
                 text = getattr(result, 'markdown', str(result))
                 
-                # We save the extracted markdown to a temp file and use our MarkdownParser!
                 temp_md_path = os.path.join(self.cache_dir, "temp_ocr.md")
                 os.makedirs(os.path.dirname(temp_md_path), exist_ok=True)
                 with open(temp_md_path, 'w', encoding='utf-8') as f:
@@ -178,7 +170,6 @@ class NaviDoc:
                 self.index.load_tree(tree_data)
                 self.index_type = "tree"
                 
-                # Clean up temp file
                 try:
                     os.remove(temp_md_path)
                 except:
@@ -230,10 +221,34 @@ class NaviDoc:
             self.index.load_pages(data["pages"])
         print(f"Index successfully loaded from {file_path}")
 
+    def _verify_relevance(self, query: str, content: str) -> bool:
+        """Ask the LLM if the content is relevant to the query."""
+        prompt = f"""
+Given the user query: "{query}"
+And the following content:
+\"\"\"
+{content}
+\"\"\"
+
+Does this content contain information to answer the query?
+Reply ONLY with 'YES' or 'NO'.
+"""
+        try:
+            response = ollama.generate(model=self.model, prompt=prompt)
+            answer = response['response'].strip().upper()
+            return 'YES' in answer
+        except Exception:
+            return True # Fallback to assuming relevant if error
+
     def _navigate_tree(self, query: str, node: Dict[str, Any]) -> str:
         """Recursively navigate the tree using the local LLM."""
         if not node.get("children"):
-            return node.get("content", "")
+            content = node.get("content", "")
+            # Check relevance at leaf node!
+            if self._verify_relevance(query, content):
+                return content
+            else:
+                return "NOT_RELEVANT"
 
         headers = [child["title"] for child in node["children"]]
         
@@ -254,7 +269,12 @@ Reply ONLY with the exact section title from the list above. If none seem releva
                 
             for child in node["children"]:
                 if child["title"] == chosen_header:
-                    return self._navigate_tree(query, child)
+                    result = self._navigate_tree(query, child)
+                    if result == "NOT_RELEVANT":
+                        # If the best child was not relevant, fall back to the parent content!
+                        print(f"Notice: Leaf node in '{chosen_header}' was not relevant. Falling back to parent content.")
+                        return node.get("content", "Content not found.")
+                    return result
                     
             return node.get("content", "Navigation path lost.")
             
@@ -268,6 +288,8 @@ Reply ONLY with the exact section title from the list above. If none seem releva
 
         if self.index_type == "tree":
             relevant_content = self._navigate_tree(prompt, self.index.tree)
+            if relevant_content == "NOT_RELEVANT":
+                relevant_content = self.index.tree.get("content", "No relevant content found.")
         else:
             relevant_content = self.index.get_all_text()
 
@@ -291,13 +313,20 @@ Answer:
 
         if self.index_type == "tree":
             relevant_content = self._navigate_tree(prompt, self.index.tree)
+            if relevant_content == "NOT_RELEVANT":
+                relevant_content = self.index.tree.get("content", "No relevant content found.")
         else:
             relevant_content = self.index.get_all_text()
 
+        # Load history
         if self.enable_db and self.db:
             history = self.db.load_chat(self.session_id)
         else:
             history = self.history
+
+        # Apply History Limit
+        if len(history) > self.max_history:
+            history = history[-self.max_history:]
 
         history_str = ""
         for turn in history:
@@ -321,6 +350,7 @@ Assistant:
             response = ollama.generate(model=self.model, prompt=full_prompt)
             reply = response['response']
             
+            # Save history
             if self.enable_db and self.db:
                 self.db.save_chat(self.session_id, prompt, reply)
             else:
