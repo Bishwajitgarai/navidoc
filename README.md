@@ -19,8 +19,10 @@ Stop blindly chopping your documents into arbitrary flat chunks. NaviDoc maps yo
 *   **🚀 Model2Vec Integration**: Use the cutting-edge `potion-base-32M` model for lightning-fast tree navigation instead of heavy LLM calls. Up to **500x faster** on CPU!
 *   **📉 History Limit Control**: Configurable chat history limits (`max_history`) to prevent context blowouts and keep your local LLM fast and responsive.
 *   **🗜️ Context Compression**: Auto-summarizes large sections using pure Python (no LLM load) to prevent context overflow!
+*   **🤖 SmolLM by Default**: Uses the ultra-small and efficient `smollm` model as the default LLM for fast responses on any hardware!
 
 ### 📄 3. Enterprise Document Support
+
 
 *   **Multi-Format Mastery**: Native support for **Markdown**, **PDF** (with advanced font-size analysis), **DOCX** (with style detection), and **PPTX**.
 *   **🖼️ OCR Weaponry**: Ingest images (`.png`, `.jpg`, `.jpeg`) via seamless **GLM-OCR** integration!

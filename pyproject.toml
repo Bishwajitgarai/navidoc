@@ -1,7 +1,8 @@
 [project]
 name = "navidoc"
-version = "0.1.6"
+version = "0.1.7"
 description = "A lightweight, completely local, zero-API, tree-based RAG framework"
+
 
 
 
