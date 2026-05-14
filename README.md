@@ -2,18 +2,16 @@
 
 NaviDoc is a lightweight, **completely local, zero-API, tree-based RAG framework** designed to navigate document structures intelligently. Instead of blindly chopping your files into vector chunks, NaviDoc maps your documents into a logical structural tree hierarchy and uses local LLMs to precisely steer and navigate to answers.
 
-[![License: MIT](https://shields.io)](https://opensource.org)
-[![Python 3.10+](https://shields.io)](https://python.org)
-[![Ollama Native](https://shields.io)](https://ollama.com)
-
 ---
 
 ## ✨ Features
 
 *   **🔒 100% Private & Offline:** Your documents never leave your machine. Zero cloud APIs, zero telemetry.
-*   **🪙 Zero Token Costs:** Powered entirely by open-weights models running locally on your hardware.
-*   **🌳 Tree-Based Navigation:** Mimics human navigation by following document headers (`#`, `##`) instead of standard proximity vector chunks.
+*   **🌳 Tree-Based Navigation:** Mimics human navigation by following document structures (headers, font sizes) instead of standard proximity vector chunks.
 *   **⚡ High Precision:** Pinpoints specific structural sections, avoiding context contamination or context blowouts.
+*   **📄 Multi-Format Support**: Supports Markdown, PDF (with font-size analysis), DOCX (with style detection), and PPTX.
+*   **💾 Index Persistence**: Save your indexed tree structures to JSON and reload them instantly.
+*   **💬 Chat SDK**: Maintain conversation history with your documents SDK-style.
 
 ---
 
@@ -21,57 +19,97 @@ NaviDoc is a lightweight, **completely local, zero-API, tree-based RAG framework
 
 ### 1. Prerequisites
 
-First, ensure you have **Ollama** installed on your system to host your local LLM engine.
+NaviDoc requires **Ollama** to host your local LLM engine.
 
-1. Download Ollama from [ollama.com](https://ollama.com).
-2. Pull your local LLM of choice (e.g., Llama 3 or Mistral) via your terminal:
-   ```bash
-   ollama pull llama3
-   ```
+1.  Download and install Ollama from [ollama.com](https://ollama.com).
+2.  Pull a smart, small model (we recommend `phi3` or `llama3`):
+    ```bash
+    ollama pull phi3
+    ```
+3.  Ensure the Ollama service is running in the background before running NaviDoc.
 
 ### 2. Installation
 
-Clone this repository and install the minimal, lightweight dependency package:
+Install NaviDoc via pip:
 
 ```bash
-git clone github.com
-cd navidoc
-pip install ollama
+pip install navidoc
 ```
 
-### 3. Usage Example
+Or using `uv`:
 
-Save your project script as `navidoc.py` and execute it. Here is how simple it is to parse and query a document:
-
-```python
-from navidoc import NaviDoc
-
-# Initialize NaviDoc using your local Ollama model
-engine = NaviDoc(model="llama3")
-
-# Ingest and structurally index any local markdown document
-status = engine.ingest_markdown("your_document.md")
-print(status)
-
-# Query your document offline with 0.0 temperature precision
-response = engine.query("What are the exact system requirements?")
-print(response)
+```bash
+uv add navidoc
 ```
 
 ---
 
-## 🛠️ Architecture Blueprint
+## 💡 Usage Examples
 
-NaviDoc runs by organizing document content into key-value trees where headers map directly to contextual section blocks:
+### 🔍 One-off Query
+```python
+from navidoc import NaviDoc
 
-```text
-📄 your_document.md ──► 🌳 Tree Mapping ──► 🧠 Local LLM Navigation
-                         ├── # Header 1          ├── Checks Section 1 -> SKIP
-                         └── # Header 2          └── Checks Section 2 -> MATCH 🎯
+# Initialize (defaults to phi3 or NAVIDOC_MODEL_NAME env var)
+engine = NaviDoc()
+
+# Ingest and structurally index any local document
+status = engine.ingest("your_document.pdf")
+print(status)
+
+# Query your document offline
+response = engine.query("What are the exact system requirements?")
+print(response)
 ```
+
+### 💬 Multi-turn Chat (SDK Style)
+```python
+from navidoc import NaviDoc
+
+engine = NaviDoc()
+engine.ingest("manual.docx")
+
+# First turn
+print(engine.chat("How do I install the battery?"))
+
+# Second turn (remembers context and history!)
+print(engine.chat("Where can I buy a replacement?"))
+
+# Clear history if needed
+engine.clear_history()
+```
+
+### 💾 Save & Fast Load Index
+Avoid re-parsing large documents by saving the tree index.
+```python
+from navidoc import NaviDoc
+
+engine = NaviDoc()
+
+# First time: Parse and Save
+engine.ingest("massive_report.pdf")
+engine.save_index("storage/indices/massive_report.json")
+
+# Second time: Instant Load in milliseconds
+engine.load_index("storage/indices/massive_report.json")
+response = engine.query("What is the revenue?")
+```
+
+---
+
+## ⚙️ Configuration
+
+### Environment Variables
+You can configure NaviDoc without changing your code by setting environment variables:
+
+*   `NAVIDOC_MODEL_NAME`: Set the default Ollama model to use (Default: `phi3`).
+
+**How to change it:**
+*   **Windows (PowerShell)**: `$env:NAVIDOC_MODEL_NAME="llama3"`
+*   **Linux/Mac**: `export NAVIDOC_MODEL_NAME="llama3"`
 
 ---
 
 ## 📜 License
 
-NaviDoc is open-source software distributed completely free under the **[MIT License](LICENSE)**. Feel free to modify, distribute, and adapt it for personal or commercial workflows.
+NaviDoc is open-source software distributed completely free under the **[MIT License](LICENSE)**.
