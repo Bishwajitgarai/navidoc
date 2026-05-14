@@ -4,6 +4,7 @@ import subprocess
 import platform
 from typing import Optional, Dict, Any, List
 import ollama
+import numpy as np
 
 from .parsers.markdown import MarkdownParser
 from .parsers.pdf import PdfParser
@@ -23,7 +24,7 @@ class NaviDoc:
         :param session_id: Session ID for chat history
         :param enable_db: Whether to use SQLite for chat storage
         :param max_history: Maximum number of chat turns to keep in context
-        :param use_embeddings: Whether to use Sentence Transformers for faster tree navigation
+        :param use_embeddings: Whether to use fast embeddings for tree navigation
         """
         self.model = model or os.getenv("NAVIDOC_MODEL_NAME", "phi3")
         self.cache_dir = cache_dir or os.getenv("NAVIDOC_CACHE_DIR", "storage")
@@ -50,26 +51,35 @@ class NaviDoc:
             self.db = None
             self.history: List[Dict[str, str]] = []
             
-        # Initialize Sentence Transformer if requested
+        # Initialize Embedding Model if requested
         self.embedding_model = None
         if self.use_embeddings:
             try:
-                from sentence_transformers import SentenceTransformer
-                print("Loading Sentence Transformer model ('all-MiniLM-L6-v2') for navigation...")
-                # This will download/load a small 80MB model
-                self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-                print("Sentence Transformer loaded successfully.")
+                from model2vec import StaticModel
+                print("Loading Model2Vec 'potion-base-32M' for super-fast navigation...")
+                self.embedding_model = StaticModel.from_pretrained("minishlab/potion-base-32M")
+
+                print("Model2Vec loaded successfully.")
             except ImportError:
-                print("Warning: 'sentence-transformers' not installed. Falling back to LLM navigation.")
-                self.use_embeddings = False
+                # Fallback to sentence-transformers
+                try:
+                    from sentence_transformers import SentenceTransformer
+                    print("Loading Sentence Transformer model ('all-MiniLM-L6-v2') for navigation...")
+                    self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                    self.embedding_model.max_seq_length = 128
+                    print("Sentence Transformer loaded successfully.")
+                except ImportError:
+                    print("Warning: Neither 'model2vec' nor 'sentence-transformers' installed. Falling back to LLM navigation.")
+                    self.use_embeddings = False
         
         # Check Ollama status on init
         if self.is_ollama_running():
             print("Ollama service: Connected")
             self._ensure_model_exists()
         else:
-            print("\n⚠️ Warning: Could not connect to Ollama.")
+            print("\nWarning: Could not connect to Ollama.")
             print("Please ensure the Ollama service is running on your machine.")
+
             print("You can try calling `engine.start_ollama()` to start it.\n")
 
     def is_ollama_running(self) -> bool:
@@ -257,7 +267,7 @@ Reply ONLY with 'YES' or 'NO'.
             return True # Fallback to assuming relevant if error
 
     def _navigate_tree_with_embeddings(self, query: str, node: Dict[str, Any]) -> str:
-        """Navigate tree using embeddings instead of LLM."""
+        """Navigate tree using embeddings (Model2Vec or Sentence Transformers)."""
         if not node.get("children"):
             content = node.get("content", "")
             if self._verify_relevance(query, content):
@@ -265,27 +275,32 @@ Reply ONLY with 'YES' or 'NO'.
             else:
                 return "NOT_RELEVANT"
 
-        from sentence_transformers import util
-        import torch
-        
         headers = [child["title"] for child in node["children"]]
         
-        # Compute embeddings
-        query_emb = self.embedding_model.encode(query, convert_to_tensor=True)
-        header_embs = self.embedding_model.encode(headers, convert_to_tensor=True)
+        # Compute embeddings (both return numpy arrays by default or can be converted)
+        query_emb = self.embedding_model.encode([query])
+        header_embs = self.embedding_model.encode(headers)
         
-        # Compute cosine similarities
-        cos_scores = util.cos_sim(query_emb, header_embs)[0]
+        # Ensure they are numpy arrays
+        query_emb = np.array(query_emb)
+        header_embs = np.array(header_embs)
+        
+        # Normalize for cosine similarity
+        query_emb = query_emb / np.linalg.norm(query_emb, axis=1, keepdims=True)
+        header_embs = header_embs / np.linalg.norm(header_embs, axis=1, keepdims=True)
+        
+        # Compute dot product
+        scores = np.dot(query_emb, header_embs.T)[0]
         
         # Find best match
-        best_idx = torch.argmax(cos_scores).item()
+        best_idx = np.argmax(scores)
         chosen_header = headers[best_idx]
         
         print(f"Embedding Navigation chose: {chosen_header}")
         
         for child in node["children"]:
             if child["title"] == chosen_header:
-                result = self._navigate_tree(query, child) # Continue recursively
+                result = self._navigate_tree(query, child)
                 if result == "NOT_RELEVANT":
                     print(f"Notice: Leaf node in '{chosen_header}' was not relevant. Falling back to parent content.")
                     return node.get("content", "Content not found.")
@@ -295,13 +310,11 @@ Reply ONLY with 'YES' or 'NO'.
 
     def _navigate_tree(self, query: str, node: Dict[str, Any]) -> str:
         """Recursively navigate the tree using the local LLM or Embeddings."""
-        # If embeddings are enabled and model is loaded, use them for faster navigation!
         if self.use_embeddings and self.embedding_model:
             return self._navigate_tree_with_embeddings(query, node)
             
         if not node.get("children"):
             content = node.get("content", "")
-            # Check relevance at leaf node!
             if self._verify_relevance(query, content):
                 return content
             else:
@@ -328,7 +341,6 @@ Reply ONLY with the exact section title from the list above. If none seem releva
                 if child["title"] == chosen_header:
                     result = self._navigate_tree(query, child)
                     if result == "NOT_RELEVANT":
-                        # If the best child was not relevant, fall back to the parent content!
                         print(f"Notice: Leaf node in '{chosen_header}' was not relevant. Falling back to parent content.")
                         return node.get("content", "Content not found.")
                     return result
