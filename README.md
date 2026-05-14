@@ -14,9 +14,10 @@ NaviDoc is a lightweight, **completely local, zero-API, tree-based RAG framework
 *   **🔒 100% Private & Offline:** Your documents never leave your machine. Zero cloud APIs, zero telemetry.
 *   **🌳 Tree-Based Navigation:** Mimics human navigation by following document structures (headers, font sizes) instead of standard proximity vector chunks.
 *   **⚡ High Precision:** Pinpoints specific structural sections, avoiding context contamination or context blowouts.
-*   **📄 Multi-Format Support**: Supports Markdown, PDF (with font-size analysis), DOCX (with style detection), and PPTX.
+*   **📄 Multi-Format Support**: Supports Markdown, PDF (with font-size analysis), DOCX (with style detection), PPTX, and **Images** (PNG, JPG) via GLM-OCR!
 *   **💾 Index Persistence**: Save your indexed tree structures to JSON and reload them instantly.
-*   **💬 Chat SDK**: Maintain conversation history with your documents SDK-style.
+*   **💬 Persistent Chat SDK**: Maintain conversation history with your documents SDK-style, backed by a persistent SQLite database!
+
 
 ---
 
@@ -111,6 +112,19 @@ You can configure NaviDoc without changing your code by setting environment vari
 *   **Linux/Mac**: `export NAVIDOC_MODEL_NAME="llama3"`
 
 ---
+
+## ⌨️ CLI Usage
+
+NaviDoc comes with a powerful CLI that acts as a helper for your local environment and Ollama:
+
+*   **Install Ollama**: `navidoc install-ollama` (Auto-downloads and installs for your OS)
+*   **Run Models**: `navidoc run <model>` (e.g., `navidoc run phi3`)
+*   **Pull Models**: `navidoc pull <model>`
+*   **List Models**: `navidoc list`
+*   **Forward Commands**: `navidoc ollama <args>` (Forward any command directly to Ollama)
+
+---
+
 
 ## 🧠 How Vectorless RAG Works
 
