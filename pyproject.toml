@@ -1,7 +1,8 @@
 [project]
 name = "navidoc"
-version = "0.1.4"
+version = "0.1.5"
 description = "A lightweight, completely local, zero-API, tree-based RAG framework"
+
 
 
 readme = "README.md"
@@ -12,7 +13,11 @@ dependencies = [
     "pypdf>=6.11.0",
     "python-docx>=1.2.0",
     "python-pptx>=1.0.2",
+    "glmocr",
+    "sentence-transformers",
 ]
+
+
 
 [project.scripts]
 navidoc = "navidoc.cli:main"

@@ -40,12 +40,46 @@ def install_ollama():
         print(f"Automatic installation not supported for OS: {system}")
         print("Please download Ollama manually from https://ollama.com")
 
+def doctor():
+    """Check status of dependencies."""
+    print("NaviDoc Doctor - Checking dependencies...\n")
+    
+    # Check Ollama
+    try:
+        import ollama
+        ollama.list()
+        print("[OK] Ollama service is connected.")
+    except Exception:
+        print("[FAIL] Ollama service is not running or accessible. Run 'navidoc install-ollama' or start it manually.")
+        
+    # Check Model2Vec
+    try:
+        from model2vec import StaticModel
+        print("[OK] Model2Vec is installed.")
+    except ImportError:
+        print("[FAIL] Model2Vec is not installed.")
+        
+    # Check GLM-OCR
+    try:
+        import glmocr
+        print("[OK] GLM-OCR is installed.")
+    except ImportError:
+        print("[FAIL] GLM-OCR is not installed.")
+        
+    # Check Sentence Transformers
+    try:
+        from sentence_transformers import SentenceTransformer
+        print("[OK] Sentence-Transformers is installed.")
+    except ImportError:
+        print("[FAIL] Sentence-Transformers is not installed.")
+
 def main():
     if len(sys.argv) < 2:
         print("NaviDoc CLI - Your local RAG and Ollama helper")
         print("Usage: navidoc <command> [args]")
         print("\nCommands:")
         print("  install-ollama  Download and install Ollama automatically")
+        print("  doctor          Check status of dependencies")
         print("  run <model>     Run an Ollama model directly")
         print("  pull <model>    Pull an Ollama model")
         print("  list            List installed Ollama models")
@@ -56,6 +90,8 @@ def main():
     
     if command == "install-ollama":
         install_ollama()
+    elif command == "doctor":
+        doctor()
     elif command == "run":
         if len(sys.argv) < 3:
             print("Usage: navidoc run <model>")
@@ -84,7 +120,7 @@ def main():
             print("Error: Ollama command not found. Is it installed?")
     else:
         print(f"Unknown command: {command}")
-        print("Available commands: install-ollama, run, pull, list, ollama")
+        print("Available commands: install-ollama, doctor, run, pull, list, ollama")
 
 if __name__ == "__main__":
     main()

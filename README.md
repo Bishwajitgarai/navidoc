@@ -51,15 +51,9 @@ Install NaviDoc via pip or uv:
 pip install navidoc
 ```
 
-To enable the super-fast Model2Vec navigation:
-```bash
-pip install model2vec
-```
 
-To enable Image/OCR support:
-```bash
-pip install glmocr
-```
+*That's it! All core dependencies like Model2Vec, Sentence-Transformers, and GLM-OCR are now included automatically!*
+
 
 ### 2. Prerequisites
 
@@ -111,7 +105,9 @@ print(engine.chat("What are their primary responsibilities?"))
 NaviDoc comes with a powerful CLI to manage your local environment:
 
 *   `navidoc install-ollama`: Auto-downloads and installs Ollama for your OS.
+*   `navidoc doctor`: Check status of dependencies.
 *   `navidoc run <model>`: Run a specific model.
+
 *   `navidoc pull <model>`: Pull a model.
 *   `navidoc list`: List installed models.
 *   `navidoc ollama <args>`: Forward any command directly to Ollama.
